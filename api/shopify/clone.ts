@@ -20,7 +20,7 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export async function POST(request: Request) {
+export default async function handler(request: Request) {
   try {
     const session = await unseal<{ shop: string; accessToken: string }>(
       readCookie(request, "shopify_session") || ""
