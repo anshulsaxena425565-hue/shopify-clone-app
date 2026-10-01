@@ -14,10 +14,12 @@ function json(body: unknown, status=200) {
 
 export async function POST(request: Request) {
   try {
-    const auth = request.headers.get("authorization") || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    const { shop, product } = await request.json();
-    if (!token || !shop || !product) return json({ error:"Missing Shopify credentials or product." }, 401);
+    const { readCookie, unseal } = await import("../_lib/session");
+    const session = await unseal<{shop:string;accessToken:string}>(readCookie(request,"shopify_session") || "");
+    const { product } = await request.json();
+    const shop = session?.shop;
+    const token = session?.accessToken;
+    if (!token || !shop || !product) return json({ error:"Connect a Shopify store before cloning." }, 401);
 
     const variants = (product.variants?.length ? product.variants : [{
       price: product.price, compareAtPrice: product.compareAtPrice, options: {}
