@@ -1,17 +1,14 @@
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
-  });
-}
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-export const runtime = "nodejs";
-export const maxDuration = 10;
+type VercelResponse = ServerResponse & {
+  status: (code: number) => VercelResponse;
+  json: (body: unknown) => void;
+};
 
-export function GET() {
-  return json({
+export default function handler(_req: IncomingMessage, res: VercelResponse) {
+  return res.status(200).json({
     ok: true,
     service: "product-clone-api",
-    runtime: "nodejs"
+    runtime: process.version
   });
 }
