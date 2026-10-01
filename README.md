@@ -1,23 +1,34 @@
 # Product Clone App
 
-A React + TypeScript Phase 1 prototype for importing public product-page data, reviewing/editing it, and preparing it for cloning into a Shopify store.
+A React + TypeScript product-cloning app that imports public product-page data, lets you review/edit it, and clones the approved product into a connected Shopify store.
 
-## Phase 1
+## Phase 1 — UI foundation
 
-- Paste a product URL
-- Detect source platform (demo detector)
-- Fetch product using a replaceable extractor service
-- Product preview and editor
-- Images
-- Variants/options
-- Pricing
-- Inventory
-- Tags
-- Product validation
-- Clone workflow simulation
-- Toasts and loading/error states
+- Product URL input and validation
+- Product preview/editor
+- Images, variants, pricing, inventory and tags
 - Responsive admin-style UI
-- Clean service/types separation for later Shopify Partner integration
+- Demo extractor and clone workflow
+
+## Phase 2 — real integration
+
+- Server-side Product JSON-LD extraction at `/api/extract`
+- Shopify authorization-code OAuth flow
+- Encrypted HttpOnly Shopify session cookie
+- Shopify connection status
+- Shopify Admin GraphQL `productSet` cloning
+
+## Phase 3 — production hardening
+
+- Validated Shopify `myshopify.com` domains before OAuth
+- Environment-aware Secure cookies for local HTTPS/HTTP development
+- Separate `Set-Cookie` headers on OAuth callback
+- Stronger `SESSION_SECRET` requirement
+- Shopify variant SKU, options, compare-at pricing and tags mapping
+- Real clone success screen with Shopify Admin link
+- Human-readable Shopify GraphQL errors
+- Explicit inventory limitation when no destination location ID is configured
+- Updated production-oriented documentation
 
 ## Run locally
 
@@ -26,33 +37,36 @@ npm install
 npm run dev
 ```
 
-## Important
+## Environment
 
-Phase 1 uses a simulated extractor and Shopify clone service. Phase 2 will replace these with a secure server-side extractor and Shopify OAuth + Admin GraphQL API integration.
-
-## Phase 2 — real integration
-
-Phase 2 adds:
-- Server-side Product JSON-LD extraction at `/api/extract`
-- Shopify OAuth authorization-code flow
-- Encrypted HttpOnly Shopify session cookie
-- Shopify connection status
-- Shopify Admin GraphQL `productSet` cloning for product data, options, variants, and media
-- Server-side Shopify access-token handling
-
-### Environment
-
-Copy `.env.example` to your deployment environment and set:
+Set these server-side environment variables:
 
 - `SHOPIFY_CLIENT_ID`
 - `SHOPIFY_CLIENT_SECRET`
 - `SHOPIFY_SCOPES` (default: `write_products,read_products`)
 - `SHOPIFY_API_VERSION` (default: `2026-07`)
-- `SESSION_SECRET` — a long random secret
+- `SESSION_SECRET` — use a random value of at least 32 characters
+
+Copy `.env.example` as the starting point for local configuration. Never expose the Shopify client secret or session secret in frontend code.
 
 Configure the Shopify app redirect URL as:
+
 `https://YOUR_DOMAIN/api/shopify/callback`
 
-The current extractor intentionally handles schema.org Product JSON-LD first. Some JavaScript-rendered, protected, or platform-specific stores will require dedicated adapters or a browser-rendering worker.
+For local HTTP development, the OAuth session cookie is intentionally created without the `Secure` attribute. Production deployments should use HTTPS.
 
-For local Vite development, the extractor falls back to the Phase 1 demo extractor when `/api/extract` is unavailable. Deploy the `api/` functions on a serverless platform such as Vercel for the real Phase 2 flow.
+## Shopify API behavior
+
+The app uses the standalone authorization-code grant and sends the resulting access token only from server-side API functions. Shopify's current documentation describes authorization-code grant for apps that run outside the Shopify admin. citeturn0search0turn0search2
+
+The clone endpoint uses `productSet`, which Shopify documents for synchronizing external product catalogs. The mutation requires the `write_products` scope. citeturn0search9turn0search8
+
+Variant SKU, price, compare-at price and option values are mapped through `ProductVariantSetInput`. citeturn1search1
+
+Inventory is not blindly copied because Shopify inventory quantities require a specific destination location ID. citeturn1search5
+
+## Extraction limitation
+
+The current extractor intentionally prioritizes schema.org Product JSON-LD. JavaScript-only, protected, or platform-specific stores can require a dedicated adapter or browser-rendering worker.
+
+For local Vite development, the frontend falls back to the Phase 1 demo extractor only when `/api/extract` is unavailable. Deploy the `api/` functions on a serverless platform such as Vercel for the real flow.
