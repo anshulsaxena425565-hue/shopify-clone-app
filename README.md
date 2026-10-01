@@ -70,3 +70,4 @@ Inventory is not blindly copied because Shopify inventory quantities require a s
 The current extractor intentionally prioritizes schema.org Product JSON-LD. JavaScript-only, protected, or platform-specific stores can require a dedicated adapter or browser-rendering worker.
 
 For local Vite development, the frontend falls back to the Phase 1 demo extractor only when `/api/extract` is unavailable. Deploy the `api/` functions on a serverless platform such as Vercel for the real flow.
+
