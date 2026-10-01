@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, ClipboardPaste, ExternalLink, Image as ImageIcon, Link2, LoaderCircle, Package, Plus, Search, ShoppingBag, Sparkles, Store, Tag, Trash2, Upload, X } from "lucide-react";
 import type { Product, ProductImage, ProductVariant } from "./types/product";
 import { extractor } from "./services/extractor";
+import { demoProductFromUrl } from "./services/extractor/mockExtractor";
 import { cloneProductToShopify, type ShopifyCloneResult } from "./services/shopify/products";
 
 type Step = "import" | "review" | "done";
@@ -20,6 +21,19 @@ export default function App() {
   const [cloneResult, setCloneResult] = useState<ShopifyCloneResult | null>(null);
   const showToast = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2800); };
   useEffect(() => { fetch("/api/shopify/status").then(r=>r.json()).then(data=>setShop(data.shop || null)).catch(()=>{}); }, []);
+  const useDemo = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await demoProductFromUrl(demoUrl);
+      setProduct(result.product);
+      setWarnings(result.warnings);
+      setUrl(demoUrl);
+      setStep("review");
+    } finally {
+      setLoading(false);
+    }
+  };
   const connectShopify = () => {
     const domain = window.prompt("Enter your Shopify store domain (example.myshopify.com):")?.trim();
     if (domain) window.location.href = `/api/shopify/install?shop=${encodeURIComponent(domain)}`;
@@ -33,7 +47,7 @@ export default function App() {
     try { new URL(normalized); } catch { return setError("That doesn't look like a valid product URL."); }
     setLoading(true);
     try { const result = await extractor.extract(normalized); setProduct(result.product); setWarnings(result.warnings); setStep("review"); }
-    catch { setError("We couldn't extract this product. Please check the URL and try again."); }
+    catch (error) { setError(error instanceof Error ? error.message : "We couldn't extract this product. Please check the URL and try again."); }
     finally { setLoading(false); }
   };
 
@@ -68,7 +82,7 @@ export default function App() {
     <main className="main">
       <header className="topbar"><div><div className="eyebrow">PRODUCT CLONER</div><h1>{step === "import" ? "Clone a product" : step === "review" ? "Review product" : "Product cloned"}</h1></div>{step !== "import" && <button className="secondary-btn" onClick={reset}><ArrowLeft size={16} /> New clone</button>}</header>
       <div className="content">
-        {step === "import" && <ImportScreen url={url} setUrl={setUrl} loading={loading} error={error} onImport={importProduct} onDemo={() => setUrl(demoUrl)} />}
+        {step === "import" && <ImportScreen url={url} setUrl={setUrl} loading={loading} error={error} onImport={importProduct} onDemo={useDemo} />}
         {step === "review" && product && <ReviewScreen product={product} warnings={warnings} validation={validation} cloning={cloning} error={error} updateProduct={updateProduct} updateVariant={updateVariant} onClone={clone} />}
         {step === "done" && product && <DoneScreen product={product} result={cloneResult} onReset={reset} />}
       </div>

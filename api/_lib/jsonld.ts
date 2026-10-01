@@ -53,3 +53,31 @@ export function extractJsonLd(html: string, sourceUrl: string): ExtractedProduct
     tags: [], handle
   };
 }
+export function extractMetadataProduct(html: string, sourceUrl: string): ExtractedProduct | null {
+  const meta = (name: string) => {
+    const escaped = name.replace(/[.*+?^{}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`<meta[^>]+(?:property|name)=[\"']${escaped}[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>`, "i");
+    const alt = new RegExp(`<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+(?:property|name)=[\"']${escaped}[\"'][^>]*>`, "i");
+    return re.exec(html)?.[1] || alt.exec(html)?.[1] || "";
+  };
+  const title = meta("og:title") || meta("twitter:title") || /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim() || "";
+  const description = meta("og:description") || meta("description");
+  const image = meta("og:image") || meta("twitter:image");
+  const currency = (meta("product:price:currency") || "INR").toUpperCase();
+  const priceMatch = (meta("product:price:amount") || html.match(/(?:₹|INR|USD|\$)\s*([0-9][0-9,]*(?:\.[0-9]+)?)/i)?.[1] || "").replace(/,/g, "");
+  const price = asNumber(priceMatch);
+  if (!title && !description && !image && !price) return null;
+  const handle = new URL(sourceUrl).pathname.split("/").filter(Boolean).pop() || title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+  return {
+    title,
+    description: description || "",
+    vendor: "",
+    productType: "",
+    price,
+    currency,
+    images: image ? [{ id: "meta-image", src: image, alt: title || "Product image" }] : [],
+    variants: [{ id: "default", title: "Default", sku: "", price, inventory: 0, options: {} }],
+    tags: [],
+    handle
+  };
+}

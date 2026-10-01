@@ -1,4 +1,4 @@
-import { extractJsonLd } from "./_lib/jsonld";
+import { extractJsonLd, extractMetadataProduct } from "./_lib/jsonld";
 
 function json(body: unknown, status=200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -18,12 +18,12 @@ export async function POST(request: Request) {
     if (!response.ok) return json({ error: `Source returned HTTP ${response.status}.` }, 502);
 
     const html = await response.text();
-    const product = extractJsonLd(html, parsed.toString());
+    const product = extractJsonLd(html, parsed.toString()) || extractMetadataProduct(html, parsed.toString());
     if (!product) return json({ error: "No Product JSON-LD was found. This source may require a platform-specific adapter or browser rendering." }, 422);
 
     return json({
       product: { id: crypto.randomUUID(), sourceUrl: parsed.toString(), sourcePlatform: parsed.hostname.includes("myshopify.com") ? "Shopify" : "Generic", status:"draft", ...product },
-      warnings: ["Phase 2 currently extracts schema.org Product JSON-LD. JavaScript-only pages and protected sources need a platform-specific adapter."]
+      warnings: ["Extraction uses Product JSON-LD first, then OpenGraph/meta fallbacks. JavaScript-only or protected pages may still require browser rendering or a platform-specific adapter."]
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Extraction failed." }, 500);
