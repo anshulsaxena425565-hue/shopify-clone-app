@@ -1,28 +1,56 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { extractJsonLd, extractMetadataProduct } from "./_lib/jsonld";
 
-export const runtime = "nodejs";
-export const maxDuration = 30;
+type VercelRequest = IncomingMessage & {
+  body?: unknown;
+};
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
-  });
+type VercelResponse = ServerResponse & {
+  status: (code: number) => VercelResponse;
+  json: (body: unknown) => void;
+};
+
+function send(res: VercelResponse, status: number, body: unknown) {
+  res.status(status).json(body);
 }
 
-export function GET() {
-  return json({ ok: true, service: "product-extractor" });
-}
+async function readBody(req: VercelRequest): Promise<unknown> {
+  if (req.body !== undefined) return req.body;
 
-export async function POST(request: Request) {
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+
+  if (!raw.trim()) return {};
   try {
-    const body = await request.json();
-    const url = body && typeof body === "object" && "url" in body ? body.url : undefined;
-    if (typeof url !== "string") return json({ error: "A product URL is required." }, 400);
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("Request body must be valid JSON.");
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === "GET") {
+    return send(res, 200, { ok: true, service: "product-extractor" });
+  }
+
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
+    return send(res, 405, { error: "Method not allowed." });
+  }
+
+  try {
+    const body = await readBody(req);
+    const url = body && typeof body === "object" && "url" in body
+      ? (body as { url?: unknown }).url
+      : undefined;
+
+    if (typeof url !== "string") {
+      return send(res, 400, { error: "A product URL is required." });
+    }
 
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      return json({ error: "Only HTTP(S) URLs are supported." }, 400);
+      return send(res, 400, { error: "Only HTTP(S) URLs are supported." });
     }
 
     const controller = new AbortController();
@@ -32,7 +60,7 @@ export async function POST(request: Request) {
     try {
       response = await fetch(parsed.toString(), {
         headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; ProductCloneBot/1.0; +https://example.com/bot)",
+          "User-Agent": "Mozilla/5.0 (compatible; ProductCloneBot/1.0)",
           "Accept": "text/html,application/xhtml+xml"
         },
         redirect: "follow",
@@ -42,7 +70,9 @@ export async function POST(request: Request) {
       clearTimeout(timeout);
     }
 
-    if (!response.ok) return json({ error: `Source returned HTTP ${response.status}.` }, 502);
+    if (!response.ok) {
+      return send(res, 502, { error: `Source returned HTTP ${response.status}.` });
+    }
 
     const html = await response.text();
     const product =
@@ -50,12 +80,12 @@ export async function POST(request: Request) {
       extractMetadataProduct(html, parsed.toString());
 
     if (!product) {
-      return json({
+      return send(res, 422, {
         error: "No product data was found. This source may require JavaScript rendering or a platform-specific adapter."
-      }, 422);
+      });
     }
 
-    return json({
+    return send(res, 200, {
       product: {
         id: crypto.randomUUID(),
         sourceUrl: parsed.toString(),
@@ -68,10 +98,10 @@ export async function POST(request: Request) {
       ]
     });
   } catch (error) {
+    console.error("[extract] error:", error);
     const message = error instanceof Error
       ? (error.name === "AbortError" ? "The source took too long to respond." : error.message)
       : "Extraction failed.";
-    console.error("[extract] error:", error);
-    return json({ error: message }, 500);
+    return send(res, 500, { error: message });
   }
 }
