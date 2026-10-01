@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, ClipboardPaste, ExternalLink, Image as ImageIcon, Link2, LoaderCircle, Package, Plus, Search, ShoppingBag, Sparkles, Store, Tag, Trash2, Upload, X } from "lucide-react";
 import type { Product, ProductImage, ProductVariant } from "./types/product";
 import { extractor } from "./services/extractor";
@@ -16,7 +16,13 @@ export default function App() {
   const [cloning, setCloning] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [shop, setShop] = useState<string | null>(null);
   const showToast = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2800); };
+  useEffect(() => { fetch("/api/shopify/status").then(r=>r.json()).then(data=>setShop(data.shop || null)).catch(()=>{}); }, []);
+  const connectShopify = () => {
+    const domain = window.prompt("Enter your Shopify store domain (example.myshopify.com):")?.trim();
+    if (domain) window.location.href = `/api/shopify/install?shop=${encodeURIComponent(domain)}`;
+  };
 
   const importProduct = async () => {
     setError("");
@@ -56,7 +62,7 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><ShoppingBag size={19} /></div><div><strong>Product Clone</strong><span>Phase 1</span></div></div>
       <nav><div className="nav-label">Workspace</div><button className="nav-item active"><Plus size={17} /> Clone product</button><button className="nav-item muted"><Package size={17} /> Clone history</button></nav>
-      <div className="sidebar-bottom"><div className="connection-card"><div className="connection-icon"><Store size={17} /></div><div><span>Destination store</span><strong>Not connected</strong></div><ChevronRight size={15} /></div><p>Shopify connection comes in Phase 2.</p></div>
+      <div className="sidebar-bottom"><button className="connection-card connection-button" onClick={connectShopify}><div className="connection-icon"><Store size={17} /></div><div><span>Destination store</span><strong>{shop || "Connect Shopify"}</strong></div><ChevronRight size={15} /></button><p>{shop ? "Shopify OAuth connected." : "Connect your Shopify store to enable cloning."}</p></div>
     </aside>
     <main className="main">
       <header className="topbar"><div><div className="eyebrow">PRODUCT CLONER</div><h1>{step === "import" ? "Clone a product" : step === "review" ? "Review product" : "Product cloned"}</h1></div>{step !== "import" && <button className="secondary-btn" onClick={reset}><ArrowLeft size={16} /> New clone</button>}</header>
