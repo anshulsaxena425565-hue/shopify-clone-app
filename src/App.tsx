@@ -47,6 +47,7 @@ export default function App() {
     if (!product || validation.length) return;
     setCloning(true);
     try { const result = await cloneProductToShopify(product); if (result.success) { setStep("done"); showToast("Product cloned successfully."); } }
+    catch (error) { setError(error instanceof Error ? error.message : "Clone failed."); }
     finally { setCloning(false); }
   };
   const reset = () => { setStep("import"); setProduct(null); setWarnings([]); setError(""); setUrl(""); };
