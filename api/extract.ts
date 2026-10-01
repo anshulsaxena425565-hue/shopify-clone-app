@@ -4,7 +4,7 @@ function json(body: unknown, status=200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
-export default async function handler(request: Request) {
+export async function POST(request: Request) {
   try {
     const { url } = await request.json();
     if (typeof url !== "string") return json({ error: "A product URL is required." }, 400);

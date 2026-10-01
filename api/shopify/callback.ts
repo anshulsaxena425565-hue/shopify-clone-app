@@ -1,7 +1,7 @@
 import { getShopDomain, requireEnv } from "../_lib/shopify";
 import { cookie, readCookie, seal, unseal } from "../_lib/session";
 
-export default async function handler(request: Request) {
+export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const shop = getShopDomain(url.searchParams.get("shop") || "");
