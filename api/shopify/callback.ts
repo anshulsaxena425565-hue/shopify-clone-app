@@ -1,4 +1,5 @@
 import { getShopDomain, requireEnv } from "../_lib/shopify";
+import { cookie, readCookie, seal, unseal } from "../_lib/session";
 
 export async function GET(request: Request) {
   try {
@@ -6,10 +7,11 @@ export async function GET(request: Request) {
     const shop = getShopDomain(url.searchParams.get("shop") || "");
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    if (!code || !state) return new Response("Missing Shopify OAuth parameters.", { status: 400 });
+    const stored = await unseal<{state:string;shop:string;createdAt:number}>(readCookie(request,"shopify_oauth_state")||"");
+    if (!code || !state || !stored || stored.state !== state || stored.shop !== shop || Date.now()-stored.createdAt>10*60*1000) {
+      return new Response("Invalid or expired Shopify OAuth state.", { status: 400 });
+    }
 
-    // Production hardening: persist the state in a signed, short-lived cookie/session
-    // before redirecting to Shopify, then compare it here to prevent CSRF.
     const clientId = requireEnv("SHOPIFY_CLIENT_ID");
     const clientSecret = requireEnv("SHOPIFY_CLIENT_SECRET");
     const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -19,10 +21,11 @@ export async function GET(request: Request) {
     const token = await tokenResponse.json();
     if (!tokenResponse.ok || !token.access_token) return new Response("Shopify token exchange failed.", { status: 502 });
 
-    // Do not put the access token in the URL or browser storage.
-    // Connect this result to a server-side encrypted session/database in the next step.
-    return new Response(`Shopify connected for ${shop}. Store the token server-side before enabling cloning.`, {
-      status:200, headers:{"Content-Type":"text/plain","Cache-Control":"no-store"}
-    });
+    const session=await seal({shop,accessToken:token.access_token});
+    const appOrigin=url.origin;
+    return new Response(null,{status:302,headers:{
+      Location:`${appOrigin}/?shopify=connected`,
+      "Set-Cookie":[`shopify_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,"shopify_oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"].join(", ")
+    }});
   } catch (error) { return new Response(error instanceof Error ? error.message : "Shopify callback failed.", { status:500 }); }
 }
