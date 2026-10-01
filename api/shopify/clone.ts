@@ -20,12 +20,33 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+interface SourceVariant {
+  price?: unknown;
+  compareAtPrice?: unknown;
+  sku?: unknown;
+  title?: unknown;
+  options?: Record<string, unknown>;
+}
+
+interface ProductPayload {
+  title?: unknown;
+  description?: unknown;
+  vendor?: unknown;
+  productType?: unknown;
+  handle?: unknown;
+  price?: unknown;
+  compareAtPrice?: unknown;
+  variants?: SourceVariant[];
+  tags?: unknown;
+  images?: Array<{ src?: unknown; alt?: unknown }>;
+}
+
 export async function POST(request: Request) {
   try {
     const session = await unseal<{ shop: string; accessToken: string }>(
       readCookie(request, "shopify_session") || ""
     );
-    const body = await request.json();
+    const body = await request.json() as { product?: ProductPayload };
     const product = body?.product;
     const shop = session?.shop;
     const token = session?.accessToken;
@@ -33,18 +54,19 @@ export async function POST(request: Request) {
     if (!token || !shop) return json({ error: "Connect a Shopify store before cloning." }, 401);
     if (!product || typeof product !== "object") return json({ error: "A product payload is required." }, 400);
 
-    const sourceVariants = Array.isArray(product.variants) && product.variants.length
-      ? product.variants
-      : [{
-          price: product.price,
-          compareAtPrice: product.compareAtPrice,
-          sku: "",
-          title: "Default",
-          options: {}
-        }];
+    const sourceVariants: SourceVariant[] =
+      Array.isArray(product.variants) && product.variants.length
+        ? product.variants
+        : [{
+            price: product.price,
+            compareAtPrice: product.compareAtPrice,
+            sku: "",
+            title: "Default",
+            options: {}
+          }];
 
-    const variants = sourceVariants.map((variant: any) => {
-      const optionValues = Object.entries(variant.options || {})
+    const variants = sourceVariants.map((variant) => {
+      const optionValues = Object.entries(variant.options ?? {})
         .filter(([optionName, value]) => cleanString(optionName) && cleanString(value))
         .map(([optionName, value]) => ({
           optionName: cleanString(optionName),
@@ -56,26 +78,31 @@ export async function POST(request: Request) {
           ? optionValues
           : [{ optionName: "Title", name: cleanString(variant.title) || "Default Title" }],
         price: String(Number(variant.price) || 0),
-        compareAtPrice: variant.compareAtPrice == null ? null : String(Number(variant.compareAtPrice) || 0),
+        compareAtPrice:
+          variant.compareAtPrice == null
+            ? null
+            : String(Number(variant.compareAtPrice) || 0),
         sku: cleanString(variant.sku) || undefined
       };
     });
 
-    const productOptions = Object.entries(
-      sourceVariants.reduce((acc: Record<string, Set<string>>, variant: any) => {
-        for (const [name, value] of Object.entries(variant.options || {})) {
-          const optionName = cleanString(name);
-          const optionValue = cleanString(value);
-          if (!optionName || !optionValue) continue;
-          acc[optionName] ||= new Set<string>();
-          acc[optionName].add(optionValue);
-        }
-        return acc;
-      }, {})
-    ).map(([name, values]) => ({
-      name,
-      values: [...values].map(value => ({ name: value }))
-    }));
+    const optionSets = sourceVariants.reduce<Record<string, Set<string>>>((acc, variant) => {
+      for (const [name, value] of Object.entries(variant.options ?? {})) {
+        const optionName = cleanString(name);
+        const optionValue = cleanString(value);
+        if (!optionName || !optionValue) continue;
+        acc[optionName] ??= new Set<string>();
+        acc[optionName].add(optionValue);
+      }
+      return acc;
+    }, {});
+
+    const productOptions = Object.entries(optionSets).map(
+      ([name, values]: [string, Set<string>]) => ({
+        name,
+        values: Array.from(values, value => ({ name: value }))
+      })
+    );
 
     const tags = Array.isArray(product.tags)
       ? product.tags.map(cleanString).filter(Boolean)
@@ -83,8 +110,8 @@ export async function POST(request: Request) {
 
     const files = Array.isArray(product.images)
       ? product.images
-          .filter((image: any) => cleanString(image?.src))
-          .map((image: any) => ({
+          .filter((image) => cleanString(image?.src))
+          .map((image) => ({
             originalSource: cleanString(image.src),
             alt: cleanString(image.alt) || cleanString(product.title) || "Product image",
             contentType: "IMAGE"
